@@ -86,7 +86,7 @@ export class Shlink implements INodeType {
             name: 'List Short URLs',
             value: 'listShortUrls',
             description: 'List short URLs with optional filtering',
-            action: 'List short ur ls',
+            action: 'List short urls',
           },
         ],
         default: 'createShortUrl',               // Which option is selected by default
@@ -436,13 +436,54 @@ export class Shlink implements INodeType {
               findIfExists: this.getNodeParameter('findIfExists', i, false) as boolean,
             }, shlinkCredentials);
             break;
+
           case 'getShortUrlDetails':
             result = await shlinkTools.getShortUrlDetails({
               shortCode: this.getNodeParameter('shortCode', i) as string,
               domain: this.getNodeParameter('domain', i, '') as string || undefined,
             }, shlinkCredentials);
             break;
-          // Add the other cases...
+
+          case 'listShortUrls':
+            result = await shlinkTools.listShortUrls({
+              page: this.getNodeParameter('page', i, 1) as number,
+              itemsPerPage: this.getNodeParameter('itemsPerPage', i, 20) as number,
+              searchTerm: this.getNodeParameter('searchTerm', i, '') as string || undefined,
+              tags: (this.getNodeParameter('filterTags', i, '') as string).split(',').map(t => t.trim()).filter(Boolean) || undefined,
+              orderBy: this.getNodeParameter('orderBy', i, 'dateCreated') as 'longUrl' | 'shortCode' | 'dateCreated' | 'visits',
+              startDate: this.getNodeParameter('startDate', i, '') as string || undefined,
+              endDate: this.getNodeParameter('endDate', i, '') as string || undefined,
+            }, shlinkCredentials);
+            break;
+
+          case 'editShortUrl':
+            result = await shlinkTools.editShortUrl({
+              shortCode: this.getNodeParameter('shortCode', i) as string,
+              domain: this.getNodeParameter('domain', i, '') as string || undefined,
+              longUrl: this.getNodeParameter('newLongUrl', i, '') as string || undefined,
+              tags: (this.getNodeParameter('newTags', i, '') as string).split(',').map(t => t.trim()).filter(Boolean) || undefined,
+              title: this.getNodeParameter('newTitle', i, '') as string || undefined,
+            }, shlinkCredentials);
+            break;
+
+          case 'deleteShortUrl':
+            result = await shlinkTools.deleteShortUrl({
+              shortCode: this.getNodeParameter('shortCode', i) as string,
+              domain: this.getNodeParameter('domain', i, '') as string || undefined,
+            }, shlinkCredentials);
+            break;
+
+          case 'getVisitStatistics':
+            result = await shlinkTools.getVisitStatistics({
+              shortCode: this.getNodeParameter('shortCode', i) as string,
+              domain: this.getNodeParameter('domain', i, '') as string || undefined,
+              page: this.getNodeParameter('visitsPage', i, 1) as number,
+              itemsPerPage: this.getNodeParameter('visitsPerPage', i, 20) as number,
+              startDate: this.getNodeParameter('startDate', i, '') as string || undefined,
+              endDate: this.getNodeParameter('endDate', i, '') as string || undefined,
+            }, shlinkCredentials);
+            break;
+
           default:
             throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`, {
               itemIndex: i,
