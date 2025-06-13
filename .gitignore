@@ -56,3 +56,4 @@ pnpm-lock.yaml
 
 # n8n specific
 .n8n/
+*.tgz
