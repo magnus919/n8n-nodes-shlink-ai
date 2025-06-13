@@ -1,0 +1,112 @@
+name: Feature Request
+description: Suggest an idea for the Shlink AI Agent
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please help us understand your use case.
+
+  - type: checkboxes
+    id: existing-features
+    attributes:
+      label: Existing Features
+      description: Have you checked existing functionality?
+      options:
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have checked the current Shlink AI Agent capabilities
+          required: true
+        - label: I have reviewed the Shlink API documentation
+          required: false
+
+  - type: dropdown
+    id: feature-type
+    attributes:
+      label: Feature Type
+      options:
+        - New Shlink API operation
+        - Improved error handling
+        - Enhanced AI response format
+        - Better credential management
+        - Performance improvement
+        - Documentation improvement
+        - Testing enhancement
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Description
+      description: What problem would this feature solve? What's the current limitation?
+      placeholder: "Currently, I cannot... because..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: What would you like to see implemented?
+      placeholder: "I would like the node to support..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: Describe your specific workflow or automation scenario
+      placeholder: |
+        In my workflow, I need to:
+        1. Create short URLs from a CSV file
+        2. Track click statistics 
+        3. Send reports via email
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other approaches have you considered?
+      placeholder: "I considered using... but it doesn't work because..."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority Level
+      options:
+        - Low - Nice to have
+        - Medium - Would improve my workflow
+        - High - Blocking my use case
+        - Critical - Prevents me from using the node
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, or examples about the feature request.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be interested in helping implement this feature?
+      options:
+        - label: I would be willing to contribute code for this feature
+          required: false
+        - label: I would be willing to help test this feature
+          required: false
+        - label: I would be willing to help with documentation
+          required: false
