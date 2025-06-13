@@ -21,10 +21,9 @@ module.exports = {
     'plugin:n8n-nodes-base/nodes',
   ],
   rules: {
-    // Remove the broken n8n rules temporarily
-    // 'n8n-nodes-base/cred-class-field-display-name-missing': 'error',
-    // 'n8n-nodes-base/cred-class-field-name-missing': 'error', 
-    // 'n8n-nodes-base/cred-class-name-missing': 'error',
+    // Disable the conflicting n8n rules for inputs/outputs
+    'n8n-nodes-base/node-class-description-inputs-wrong-regular-node': 'off',
+    'n8n-nodes-base/node-class-description-outputs-wrong': 'off',
 
     // Keep working n8n rules
     'n8n-nodes-base/node-class-description-credentials-name-unsuffixed': 'error',
@@ -39,8 +38,6 @@ module.exports = {
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/no-explicit-any': 'warn',
     '@typescript-eslint/no-non-null-assertion': 'warn',
-    // Remove the broken @typescript-eslint/prefer-const rule
-    // '@typescript-eslint/prefer-const': 'error',
 
     // General rules
     'prefer-const': 'error',
