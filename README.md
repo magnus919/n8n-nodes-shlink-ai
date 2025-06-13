@@ -333,4 +333,4 @@ Special thanks to:
 
 ---
 
-Made with ❤️ by [Magnus Hedemark](https://github.com/magnus919) at [Groktopus LLC](mailto:magnus@groktop.us)
+Made with ❤️ by [Magnus Hedemark](https://github.com/magnus919) at [Groktopus LLC](mailto:magnus@groktop.us)# Test CI trigger
