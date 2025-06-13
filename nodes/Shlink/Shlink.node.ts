@@ -9,7 +9,7 @@ import {
   INodeTypeDescription,
   NodeApiError,
   NodeOperationError,
-  NodeConnectionType,
+  // NodeConnectionType,
 } from 'n8n-workflow';
 
 import { shlinkTools } from '../../tools/ShlinkTools';
@@ -34,8 +34,8 @@ export class Shlink implements INodeType {
     defaults: {
       name: 'Shlink',                           // Default name when users add the node
     },
-      inputs: [NodeConnectionType.Main],
-      outputs: [NodeConnectionType.Main],
+      inputs: ['main'],
+      outputs: ['main'],
     credentials: [                              // What credentials this node needs
       {
         name: 'shlinkApi',                      // Must match the credential file name
@@ -51,30 +51,18 @@ export class Shlink implements INodeType {
         name: 'operation',                       // Internal field name
         type: 'options',                         // Dropdown menu
         noDataExpression: true,                  // Don't allow expressions here
-        options: [                               // The choices in the dropdown
+        options: [
           {
-            name: 'Create Short URL',             // What users see
-            value: 'createShortUrl',              // Internal value we use
+            name: 'Create Short URL',
+            value: 'createShortUrl',
             description: 'Create a new short URL',
             action: 'Create a short URL',
           },
           {
-            name: 'Get URL Details',
-            value: 'getShortUrlDetails',
-            description: 'Get details of an existing short URL',
-            action: 'Get URL details',
-          },
-          {
-            name: 'List Short URLs',
-            value: 'listShortUrls',
-            description: 'List short URLs with optional filtering',
-            action: 'List short URLs',
-          },
-          {
-            name: 'Get Visit Statistics',
-            value: 'getVisitStatistics',
-            description: 'Get visit analytics for a short URL',
-            action: 'Get visit statistics',
+            name: 'Delete Short URL',
+            value: 'deleteShortUrl', 
+            description: 'Delete a short URL',
+            action: 'Delete short URL',
           },
           {
             name: 'Edit Short URL',
@@ -83,10 +71,22 @@ export class Shlink implements INodeType {
             action: 'Edit short URL',
           },
           {
-            name: 'Delete Short URL',
-            value: 'deleteShortUrl',
-            description: 'Delete a short URL',
-            action: 'Delete short URL',
+            name: 'Get URL Details',
+            value: 'getShortUrlDetails',
+            description: 'Get details of an existing short URL',
+            action: 'Get URL details',
+          },
+          {
+            name: 'Get Visit Statistics',
+            value: 'getVisitStatistics',
+            description: 'Get visit analytics for a short URL',
+            action: 'Get visit statistics',
+          },
+          {
+            name: 'List Short URLs',
+            value: 'listShortUrls',
+            description: 'List short URLs with optional filtering',
+            action: 'List short ur ls',
           },
         ],
         default: 'createShortUrl',               // Which option is selected by default
@@ -181,7 +181,7 @@ export class Shlink implements INodeType {
           },
         },
         default: false,
-        description: 'Return existing short URL if the long URL was already shortened',
+        description: 'Whether to return existing short URL if the long URL was already shortened',
       },
 
       // GET/EDIT/DELETE Short URL Parameters

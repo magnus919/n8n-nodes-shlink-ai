@@ -43,7 +43,7 @@ export class ShlinkApi implements ICredentialType {
     properties: {
       headers: {                                // Add these headers to every API request
         'X-Api-Key': '={{$credentials.apiKey}}',   // Use the API key from the form
-        'Accept': 'application/json',           // Tell Shlink we want JSON responses
+        Accept: 'application/json',           // Tell Shlink we want JSON responses
       },
     },
   };
