@@ -1,0 +1,721 @@
+// Shlink AI Agent Tool Functions for n8n
+// These are the actual functions that talk to your Shlink server
+// Priority Operations: 6 core Shlink operations with structured AI-to-AI responses
+
+// Specific types for Shlink API responses
+// These replace generic 'any' types for better type safety and IDE support
+
+interface ShlinkShortUrl {
+  shortCode: string;          // The generated short code (e.g., "abc123")
+  shortUrl: string;           // Full short URL (e.g., "https://short.ly/abc123")
+  longUrl: string;            // Original long URL that was shortened
+  dateCreated: string;        // ISO date when URL was created
+  tags: string[];             // Array of tags associated with this URL
+  title?: string;             // Optional human-readable title
+  domain?: string;            // Custom domain if used (optional)
+  visitsSummary?: {           // Visit statistics (newer Shlink versions)
+    total: number;
+    nonBots: number;
+    bots: number;
+  };
+  visitsCount?: number;       // Legacy visit count field (older Shlink versions)
+}
+
+interface ShlinkErrorResponse {
+  type: string;               // Unique error identifier (URI format)
+  detail: string;             // Human-readable error description
+  title: string;              // Short error title
+  status: number;             // HTTP status code
+  [key: string]: any;         // Allow additional error-specific properties
+}
+
+// Updated response interface with better typing
+// This ensures every tool function returns consistent, type-safe data
+// Updated response interface with simplified typing for build compatibility
+// Updated response interface with simplified typing for build compatibility
+interface ShlinkToolResponse {
+  success: boolean;
+  operation: string;
+  data: any; // Simplified to avoid TypeScript complexity
+  metadata: {
+    human_summary: string;
+    actionable_fields: Record<string, any>;
+    next_possible_actions: string[];
+  };
+  context: {
+    timestamp: string;
+    api_call_count: number;
+  };
+}// This is the structure for credentials that n8n will pass to our tools
+// The actual values come from the user's n8n credential setup
+interface ShlinkCredentials {
+  apiKey: string;    // The secret API key from Shlink
+  baseUrl: string;   // The URL where their Shlink server lives
+}
+
+// 1. CREATE SHORT URL - Highest Priority
+// This is what most people want to do: turn a long URL into a short one
+interface CreateShortUrlParams {
+  longUrl: string;        // The long URL they want to shorten (required)
+  customSlug?: string;    // Custom short code (optional, like "my-link")
+  domain?: string;        // Custom domain (optional, like "short.company.com")
+  tags?: string[];        // Labels to organize links (optional, like ["marketing", "social"])
+  title?: string;         // Human-readable title (optional)
+  validateUrl?: boolean;  // Should Shlink check if the URL actually works? (optional)
+  findIfExists?: boolean; // If this URL was already shortened, return the existing one? (optional)
+}
+
+// Utility function to validate URL format
+// This prevents wasted API calls and provides immediate feedback for invalid URLs
+function validateUrl(url: string): boolean {
+  try {
+    // First check: Basic URL pattern (must start with http:// or https://)
+    const urlPattern = /^https?:\/\/.+/i;
+    if (!urlPattern.test(url)) {
+      return false;
+    }
+    
+    // Second check: Try to construct URL object to catch malformed URLs
+    // This will throw an error for URLs like "https://", "http://.", etc.
+    new URL(url);
+    return true;
+  } catch {
+    // URL constructor threw an error, so this is not a valid URL
+    return false;
+  }
+}
+
+// Utility function to validate short code format
+// Shlink short codes have specific character and length requirements
+function validateShortCode(shortCode: string): boolean {
+  // Basic type and existence check
+  if (!shortCode || typeof shortCode !== 'string') {
+    return false;
+  }
+  
+  // Shlink short codes are typically alphanumeric, may include hyphens/underscores
+  // Length usually 5-10 characters for auto-generated, but custom can be longer
+  // We allow 1-50 characters to be flexible while preventing abuse
+  const shortCodePattern = /^[a-zA-Z0-9_-]{1,50}$/;
+  return shortCodePattern.test(shortCode.trim());
+}
+
+// Utility function to validate and sanitize tags
+// This prevents API errors and ensures consistent tag formatting
+function validateAndSanitizeTags(tags: string[]): string[] {
+  // Guard against non-array input
+  if (!Array.isArray(tags)) {
+    return [];
+  }
+  
+  return tags
+    .filter(tag => tag && typeof tag === 'string')  // Remove empty/non-string tags
+    .map(tag => tag.trim())                         // Remove whitespace
+    .filter(tag => tag.length > 0 && tag.length <= 100) // Reasonable tag length limit
+    .slice(0, 20); // Reasonable number of tags limit (prevent API abuse)
+}
+
+export async function createShortUrl(
+  params: CreateShortUrlParams,
+  credentials: ShlinkCredentials
+): Promise<ShlinkToolResponse> {
+  try {
+    // Input validation
+    if (!validateUrl(params.longUrl)) {
+      return {
+        success: false,
+        operation: 'create_short_url',
+        data: { error: 'Invalid URL format' },
+        metadata: {
+          human_summary: `Invalid URL format: ${params.longUrl}`,
+          actionable_fields: { invalid_url: params.longUrl },
+          next_possible_actions: ['fix_url_format', 'check_parameters']
+        },
+        context: {
+          timestamp: new Date().toISOString(),
+          api_call_count: 0
+        }
+      };
+    }
+
+    // Validate custom slug if provided
+    if (params.customSlug && !validateShortCode(params.customSlug)) {
+      return {
+        success: false,
+        operation: 'create_short_url',
+        data: { error: 'Invalid custom slug format' },
+        metadata: {
+          human_summary: `Invalid custom slug: ${params.customSlug}`,
+          actionable_fields: { invalid_slug: params.customSlug },
+          next_possible_actions: ['fix_slug_format', 'use_auto_generated']
+        },
+        context: {
+          timestamp: new Date().toISOString(),
+          api_call_count: 0
+        }
+      };
+    }
+
+    // Build the request body - only include optional fields if they were provided and are valid
+    const requestBody = {
+      longUrl: params.longUrl.trim(),  // Always trim whitespace
+      ...(params.customSlug && { customSlug: params.customSlug.trim() }),
+      ...(params.domain && { domain: params.domain.trim() }),
+      ...(params.tags && { tags: validateAndSanitizeTags(params.tags) }),
+      ...(params.title && { title: params.title.trim() }),
+      ...(params.validateUrl !== undefined && { validateUrl: params.validateUrl }),
+      ...(params.findIfExists !== undefined && { findIfExists: params.findIfExists })
+    };
+
+    // Make the actual API call to Shlink
+    const response = await fetch(`${credentials.baseUrl}/rest/v3/short-urls`, {
+      method: 'POST',                             // We're creating something new
+      headers: {
+        'Content-Type': 'application/json',       // Tell Shlink we're sending JSON
+        'Accept': 'application/json',             // Tell Shlink we want JSON back
+        'X-Api-Key': credentials.apiKey           // Prove we're allowed to use this Shlink instance
+      },
+      body: JSON.stringify(requestBody)           // Convert our data to JSON format
+    });
+
+    // Enhanced response handling with type safety
+    let data: ShlinkShortUrl | ShlinkErrorResponse;
+    
+    try {
+      // Verify we got JSON response
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('application/json')) {
+        throw new Error('Non-JSON response received from Shlink API');
+      }
+      
+      data = (await response.json()) as any;
+    } catch (parseError) {
+      return {
+        success: false,
+        operation: 'create_short_url',
+        data: { error: `Failed to parse response: ${(parseError as any)?.message}` },
+        metadata: {
+          human_summary: `Shlink returned invalid response format`,
+          actionable_fields: { http_status: response.status },
+          next_possible_actions: ['check_shlink_health', 'retry_create']
+        },
+        context: {
+          timestamp: new Date().toISOString(),
+          api_call_count: 1
+        }
+      };
+    }
+
+    // If something went wrong, return a helpful error response
+    if (!response.ok) {
+      const errorData = data as ShlinkErrorResponse;
+      return {
+        success: false,
+        operation: 'create_short_url',
+        data: errorData,
+        metadata: {
+          human_summary: `Failed to create short URL: ${errorData.detail || 'Unknown error'}`,
+          actionable_fields: { 
+            error_type: errorData.type,
+            http_status: response.status 
+          },
+          next_possible_actions: ['retry_create', 'check_api_key', 'check_parameters']
+        },
+        context: {
+          timestamp: new Date().toISOString(),
+          api_call_count: 1
+        }
+      };
+    }
+
+    // Success! Return a structured response that AI agents can easily understand
+    const shortUrlData = data as ShlinkShortUrl;
+    return {
+      success: true,
+      operation: 'create_short_url',
+      data: shortUrlData,                                 // The full response from Shlink
+      metadata: {
+        human_summary: `Created short URL ${shortUrlData.shortCode} for ${params.longUrl}`,
+        actionable_fields: {                      // Key info other AI agents might need
+          short_url: shortUrlData.shortUrl,
+          short_code: shortUrlData.shortCode,
+          long_url: shortUrlData.longUrl,
+          tags: shortUrlData.tags || []
+        },
+        next_possible_actions: ['get_url_details', 'get_visits', 'edit_url', 'delete_url']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  } catch (error) {
+    // Network error (like internet down, server unreachable, etc.)
+    return {
+      success: false,
+      operation: 'create_short_url',
+      data: { error: error instanceof Error ? error.message : String(error) },
+      metadata: {
+        human_summary: `Network error creating short URL: ${error instanceof Error ? error.message : String(error)}`,
+        actionable_fields: {},
+        next_possible_actions: ['retry_create', 'check_connection']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  }
+}
+
+// 2. GET SHORT URL DETAILS
+interface GetShortUrlParams {
+  shortCode: string;
+  domain?: string;
+}
+
+export async function getShortUrlDetails(
+  params: GetShortUrlParams,
+  credentials: ShlinkCredentials
+): Promise<ShlinkToolResponse> {
+  try {
+    let url = `${credentials.baseUrl}/rest/v3/short-urls/${params.shortCode}`;
+    if (params.domain) {
+      url += `?domain=${encodeURIComponent(params.domain)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Api-Key': credentials.apiKey
+      }
+    });
+
+    const data = (await response.json()) as any;
+
+    if (!response.ok) {
+      return {
+        success: false,
+        operation: 'get_short_url_details',
+        data: data,
+        metadata: {
+          human_summary: `Short URL ${params.shortCode} not found or error: ${(data as any).detail || 'Unknown error'}`,
+          actionable_fields: { short_code: params.shortCode },
+          next_possible_actions: ['list_urls', 'create_url']
+        },
+        context: {
+          timestamp: new Date().toISOString(),
+          api_call_count: 1
+        }
+      };
+    }
+
+    const visitCount = data.visitsSummary?.total || data.visitsCount || 0;
+    
+    return {
+      success: true,
+      operation: 'get_short_url_details',
+      data: data,
+      metadata: {
+        human_summary: `Short URL ${data.shortCode} points to ${data.longUrl} with ${visitCount} visits`,
+        actionable_fields: {
+          short_url: data.shortUrl,
+          short_code: data.shortCode,
+          long_url: data.longUrl,
+          visit_count: visitCount,
+          tags: data.tags
+        },
+        next_possible_actions: ['get_visits', 'edit_url', 'delete_url']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      operation: 'get_short_url_details',
+      data: { error: error instanceof Error ? error.message : String(error) },
+      metadata: {
+        human_summary: `Network error getting details for ${params.shortCode}: ${error instanceof Error ? error.message : String(error)}`,
+        actionable_fields: { short_code: params.shortCode },
+        next_possible_actions: ['retry_get', 'check_connection']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  }
+}
+
+// 3. LIST SHORT URLS WITH FILTERING
+interface ListShortUrlsParams {
+  page?: number;
+  itemsPerPage?: number;
+  searchTerm?: string;
+  tags?: string[];
+  orderBy?: 'longUrl' | 'shortCode' | 'dateCreated' | 'visits';
+  startDate?: string; // ISO format
+  endDate?: string; // ISO format
+}
+
+export async function listShortUrls(
+  params: ListShortUrlsParams = {},
+  credentials: ShlinkCredentials
+): Promise<ShlinkToolResponse> {
+  try {
+    const queryParams = new URLSearchParams();
+    
+    if (params.page) queryParams.append('page', params.page.toString());
+    if (params.itemsPerPage) queryParams.append('itemsPerPage', params.itemsPerPage.toString());
+    if (params.searchTerm) queryParams.append('searchTerm', params.searchTerm);
+    if (params.tags) params.tags.forEach(tag => queryParams.append('tags[]', tag));
+    if (params.orderBy) queryParams.append('orderBy', params.orderBy);
+    if (params.startDate) queryParams.append('startDate', params.startDate);
+    if (params.endDate) queryParams.append('endDate', params.endDate);
+
+    const url = `${credentials.baseUrl}/rest/v3/short-urls?${queryParams.toString()}`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Api-Key': credentials.apiKey
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        operation: 'list_short_urls',
+        data: data,
+        metadata: {
+          human_summary: `Failed to list short URLs: ${(data as any).detail || 'Unknown error'}`,
+          actionable_fields: {},
+          next_possible_actions: ['retry_list', 'check_api_key']
+        },
+        context: {
+          timestamp: new Date().toISOString(),
+          api_call_count: 1
+        }
+      };
+    }
+
+    const totalUrls = (data as any).pagination?.totalItems || (data as any).data?.length || 0;
+    const currentPage = (data as any).pagination?.currentPage || 1;
+
+    return {
+      success: true,
+      operation: 'list_short_urls',
+      data: data,
+      metadata: {
+        human_summary: `Found ${totalUrls} short URLs (page ${currentPage})`,
+        actionable_fields: {
+          total_items: totalUrls,
+          current_page: currentPage,
+          items_per_page: data.pagination?.itemsPerPage,
+          total_pages: data.pagination?.pagesCount
+        },
+        next_possible_actions: ['get_url_details', 'create_url', 'get_next_page']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      operation: 'list_short_urls',
+      data: { error: error instanceof Error ? error.message : String(error) },
+      metadata: {
+        human_summary: `Network error listing short URLs: ${error instanceof Error ? error.message : String(error)}`,
+        actionable_fields: {},
+        next_possible_actions: ['retry_list', 'check_connection']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  }
+}
+
+// 4. GET VISIT STATISTICS
+interface GetVisitsParams {
+  shortCode: string;
+  domain?: string;
+  page?: number;
+  itemsPerPage?: number;
+  startDate?: string; // ISO format
+  endDate?: string; // ISO format
+}
+
+export async function getVisitStatistics(
+  params: GetVisitsParams,
+  credentials: ShlinkCredentials
+): Promise<ShlinkToolResponse> {
+  try {
+    const queryParams = new URLSearchParams();
+    
+    if (params.domain) queryParams.append('domain', params.domain);
+    if (params.page) queryParams.append('page', params.page.toString());
+    if (params.itemsPerPage) queryParams.append('itemsPerPage', params.itemsPerPage.toString());
+    if (params.startDate) queryParams.append('startDate', params.startDate);
+    if (params.endDate) queryParams.append('endDate', params.endDate);
+
+    const url = `${credentials.baseUrl}/rest/v3/short-urls/${params.shortCode}/visits?${queryParams.toString()}`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Api-Key': credentials.apiKey
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        operation: 'get_visit_statistics',
+        data: data,
+        metadata: {
+          human_summary: `Failed to get visits for ${params.shortCode}: ${data.detail || 'Unknown error'}`,
+          actionable_fields: { short_code: params.shortCode },
+          next_possible_actions: ['get_url_details', 'list_urls']
+        },
+        context: {
+          timestamp: new Date().toISOString(),
+          api_call_count: 1
+        }
+      };
+    }
+
+    const totalVisits = data.pagination?.totalItems || data.data?.length || 0;
+    const recentVisits = data.data?.slice(0, 5) || [];
+
+    return {
+      success: true,
+      operation: 'get_visit_statistics',
+      data: data,
+      metadata: {
+        human_summary: `${params.shortCode} has ${totalVisits} total visits`,
+        actionable_fields: {
+          short_code: params.shortCode,
+          total_visits: totalVisits,
+          recent_visits_count: recentVisits.length,
+          recent_countries: [...new Set(recentVisits.map((v: any) => v.visitLocation?.countryName).filter(Boolean))]
+        },
+        next_possible_actions: ['get_url_details', 'edit_url', 'get_more_visits']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      operation: 'get_visit_statistics',
+      data: { error: error instanceof Error ? error.message : String(error) },
+      metadata: {
+        human_summary: `Network error getting visits for ${params.shortCode}: ${error instanceof Error ? error.message : String(error)}`,
+        actionable_fields: { short_code: params.shortCode },
+        next_possible_actions: ['retry_get_visits', 'check_connection']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  }
+}
+
+// 5. EDIT SHORT URL
+interface EditShortUrlParams {
+  shortCode: string;
+  domain?: string;
+  longUrl?: string;
+  tags?: string[];
+  title?: string;
+  validateUrl?: boolean;
+}
+
+export async function editShortUrl(
+  params: EditShortUrlParams,
+  credentials: ShlinkCredentials
+): Promise<ShlinkToolResponse> {
+  try {
+    const requestBody: any = {};
+    if (params.longUrl) requestBody.longUrl = params.longUrl;
+    if (params.tags) requestBody.tags = params.tags;
+    if (params.title !== undefined) requestBody.title = params.title;
+    if (params.validateUrl !== undefined) requestBody.validateUrl = params.validateUrl;
+
+    let url = `${credentials.baseUrl}/rest/v3/short-urls/${params.shortCode}`;
+    if (params.domain) {
+      url += `?domain=${encodeURIComponent(params.domain)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Api-Key': credentials.apiKey
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        operation: 'edit_short_url',
+        data: data,
+        metadata: {
+          human_summary: `Failed to edit ${params.shortCode}: ${data.detail || 'Unknown error'}`,
+          actionable_fields: { short_code: params.shortCode },
+          next_possible_actions: ['get_url_details', 'retry_edit']
+        },
+        context: {
+          timestamp: new Date().toISOString(),
+          api_call_count: 1
+        }
+      };
+    }
+
+    const changes = Object.keys(requestBody);
+    
+    return {
+      success: true,
+      operation: 'edit_short_url',
+      data: data,
+      metadata: {
+        human_summary: `Updated ${params.shortCode}: ${changes.join(', ')}`,
+        actionable_fields: {
+          short_code: data.shortCode,
+          short_url: data.shortUrl,
+          long_url: data.longUrl,
+          updated_fields: changes
+        },
+        next_possible_actions: ['get_url_details', 'get_visits']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      operation: 'edit_short_url',
+      data: { error: error instanceof Error ? error.message : String(error) },
+      metadata: {
+        human_summary: `Network error editing ${params.shortCode}: ${error instanceof Error ? error.message : String(error)}`,
+        actionable_fields: { short_code: params.shortCode },
+        next_possible_actions: ['retry_edit', 'check_connection']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  }
+}
+
+// 6. DELETE SHORT URL
+interface DeleteShortUrlParams {
+  shortCode: string;
+  domain?: string;
+}
+
+export async function deleteShortUrl(
+  params: DeleteShortUrlParams,
+  credentials: ShlinkCredentials
+): Promise<ShlinkToolResponse> {
+  try {
+    let url = `${credentials.baseUrl}/rest/v3/short-urls/${params.shortCode}`;
+    if (params.domain) {
+      url += `?domain=${encodeURIComponent(params.domain)}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+        'X-Api-Key': credentials.apiKey
+      }
+    });
+
+    // DELETE typically returns 204 No Content on success
+    if (response.status === 204) {
+      return {
+        success: true,
+        operation: 'delete_short_url',
+        data: { deleted: true },
+        metadata: {
+          human_summary: `Successfully deleted short URL ${params.shortCode}`,
+          actionable_fields: {
+            deleted_short_code: params.shortCode
+          },
+          next_possible_actions: ['list_urls', 'create_url']
+        },
+        context: {
+          timestamp: new Date().toISOString(),
+          api_call_count: 1
+        }
+      };
+    }
+
+    const data = await response.json();
+    
+    return {
+      success: false,
+      operation: 'delete_short_url',
+      data: data,
+      metadata: {
+        human_summary: `Failed to delete ${params.shortCode}: ${data.detail || 'Unknown error'}`,
+        actionable_fields: { short_code: params.shortCode },
+        next_possible_actions: ['get_url_details', 'retry_delete']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      operation: 'delete_short_url',
+      data: { error: error instanceof Error ? error.message : String(error) },
+      metadata: {
+        human_summary: `Network error deleting ${params.shortCode}: ${error instanceof Error ? error.message : String(error)}`,
+        actionable_fields: { short_code: params.shortCode },
+        next_possible_actions: ['retry_delete', 'check_connection']
+      },
+      context: {
+        timestamp: new Date().toISOString(),
+        api_call_count: 1
+      }
+    };
+  }
+}
+
+// Export all tool functions for n8n node implementation
+export const shlinkTools = {
+  createShortUrl,
+  getShortUrlDetails,
+  listShortUrls,
+  getVisitStatistics,
+  editShortUrl,
+  deleteShortUrl
+};

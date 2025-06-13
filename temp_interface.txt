@@ -1,0 +1,15 @@
+// Updated response interface with simplified typing for build compatibility
+interface ShlinkToolResponse {
+  success: boolean;
+  operation: string;
+  data: any; // Simplified to avoid TypeScript complexity
+  metadata: {
+    human_summary: string;
+    actionable_fields: Record<string, any>;
+    next_possible_actions: string[];
+  };
+  context: {
+    timestamp: string;
+    api_call_count: number;
+  };
+}
