@@ -9,7 +9,6 @@ import {
   INodeTypeDescription,
   NodeApiError,
   NodeOperationError,
-  NodeConnectionType,
 } from 'n8n-workflow';
 
 import { shlinkTools } from '../../tools/ShlinkTools';
