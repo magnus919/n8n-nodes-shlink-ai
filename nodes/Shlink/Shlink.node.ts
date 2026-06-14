@@ -9,7 +9,6 @@ import {
   INodeTypeDescription,
   NodeApiError,
   NodeOperationError,
-  NodeConnectionType,
 } from 'n8n-workflow';
 
 import { shlinkTools } from '../../tools/ShlinkTools';
@@ -34,8 +33,8 @@ export class Shlink implements INodeType {
     defaults: {
       name: 'Shlink',                           // Default name when users add the node
     },
-      inputs: [NodeConnectionType.Main],    // Fixed
-      outputs: [NodeConnectionType.Main],   // Fixed
+      inputs: ["main"],    // Fixed
+      outputs: ["main"],   // Fixed
     credentials: [                              // What credentials this node needs
       {
         name: 'shlinkApi',                      // Must match the credential file name
